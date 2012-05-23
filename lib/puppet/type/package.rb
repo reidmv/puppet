@@ -38,6 +38,11 @@ module Puppet
         package database for installed version(s), and can select
         which out of a set of available versions of a package to
         install if asked."
+    feature :minimum_versionable, "The provider is capable of selectively
+        upgrading to the latest version of a package if and only if the
+        installed version is less than a provided minimum version. Using a
+        minimum version of 1.5-2 as an example, this feature is used by
+        specifing `>= 1.5-2` as the desired value for the package."
     feature :holdable, "The provider is capable of placing packages on hold
         such that they are not automatically upgraded as a result of
         other package dependencies unless explicit action is taken by
@@ -115,7 +120,6 @@ module Puppet
       # Override the parent method, because we've got all kinds of
       # funky definitions of 'in sync'.
       def insync?(is)
-        @lateststamp ||= (Time.now.to_i - 1000)
         # Iterate across all of the should values, and see how they
         # turn out.
 
@@ -126,21 +130,7 @@ module Puppet
           when :latest
             # Short-circuit packages that are not present
             return false if is == :absent or is == :purged
-
-            # Don't run 'latest' more than about every 5 minutes
-            if @latest and ((Time.now.to_i - @lateststamp) / 60) < 5
-              #self.debug "Skipping latest check"
-            else
-              begin
-                @latest = provider.latest
-                @lateststamp = Time.now.to_i
-              rescue => detail
-                error = Puppet::Error.new("Could not get latest version: #{detail}")
-                error.set_backtrace(detail.backtrace)
-                raise error
-              end
-            end
-
+            set_latest
             case is
             when @latest
               return true
@@ -155,6 +145,10 @@ module Puppet
             return true if is == :absent or is == :purged
           when :purged
             return true if is == :purged
+          when provider.features.include?(:minimum_versionable) && /^>= [^ ]/
+            set_latest
+            @minimumversioned ||= provider.minimum_versioned(is, should, @latest)
+            return @minimumversioned
           # this handles version number matches and
           # supports providers that can have multiple versions installed
           when *Array(is)
@@ -163,6 +157,23 @@ module Puppet
         }
 
         false
+      end
+
+      def set_latest
+        @lateststamp ||= (Time.now.to_i - 1000)
+        # Don't run 'latest' more than about every 5 minutes
+        if @latest and ((Time.now.to_i - @lateststamp) / 60) < 5
+          #self.debug "Skipping latest check"
+        else
+          begin
+            @latest = provider.latest
+            @lateststamp = Time.now.to_i
+          rescue => detail
+            error = Puppet::Error.new("Could not get latest version: #{detail}")
+            error.set_backtrace(detail.backtrace)
+            raise error
+          end
+        end
       end
 
       # This retrieves the current state. LAK: I think this method is unused.
