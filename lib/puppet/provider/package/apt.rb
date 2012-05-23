@@ -5,6 +5,7 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
   desc "Package management via `apt-get`."
 
   has_feature :versionable
+  has_feature :minimum_versionable
 
   commands :aptget => "/usr/bin/apt-get"
   commands :aptcache => "/usr/bin/apt-cache"
@@ -56,7 +57,7 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
 
     str = @resource[:name]
     case should
-    when true, false, Symbol
+    when true, false, Symbol, /^>= [^ ]/
       # pass
     else
       # Add the package version and --force-yes option
@@ -79,6 +80,19 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
       self.err "Could not find latest version"
       return nil
     end
+  end
+
+  def minimum_versioned(is, should, latest)
+    should_version = should.sub(/^>= /, '')
+    need_newer = Puppet::Util::Package.versioncmp(is, should_version) < 0
+    have_newer = Puppet::Util::Package.versioncmp(should_version, latest) <= 0
+    if need_newer && !have_newer
+      self.err "version #{should} required but latest available is only #{latest}"
+    elsif need_newer
+      return false
+    end
+
+    return true
   end
 
   #
