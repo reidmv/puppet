@@ -179,17 +179,21 @@ class Puppet::Parser::Compiler
 
       # The results from Hash#partition are arrays of pairs rather than hashes,
       # so we have to convert to the forms evaluate_classes expects (Hash, and
-      # Array of class names)
-      classes_with_params = Hash[classes_with_params]
+      # Array of class names). We reverse-sort the classes with params in order
+      # to preserve the original input ordering (from @nodes.classes) in the
+      # final data structure.
+      classes_with_params = Hash[classes_with_params.reverse]
       classes_without_params.map!(&:first)
     else
       classes_with_params = {}
       classes_without_params = @node.classes
     end
 
-    evaluate_classes(classes_without_params, @node_scope || topscope)
-
+    # Classes with parameters are evaluated first in order to maximally avoid
+    # duplicate class declaration issues.
     evaluate_classes(classes_with_params, @node_scope || topscope)
+
+    evaluate_classes(classes_without_params, @node_scope || topscope)
   end
 
   # Evaluate each specified class in turn.  If there are any classes we can't
