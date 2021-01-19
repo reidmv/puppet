@@ -1516,9 +1516,10 @@ class Type
       be queried for reporting purposes."
 
     validate do |param|
-      # Not implemented. Should enforce JSON-compatible data structures only.
-      # Strings are fine. Arrays are fine. Hashes are fine.  No fancy objects,
-      # deferred stuff, etc.
+      data_type = Puppet::Pops::Types::TypeParser.singleton.parse('Data')
+      unless data_type.instance?(param)
+        raise ArgumentError, _("Annotations must be of type Data; invalid annotation '%{param}'") % { param: param.to_s }
+      end
     end
   end
 
